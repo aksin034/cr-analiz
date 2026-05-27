@@ -1,6 +1,5 @@
 import streamlit as st
 import requests
-from bs4 import BeautifulSoup
 
 # Səhifə konfiqurasiyası
 st.set_page_config(
@@ -30,64 +29,62 @@ st.write("### 🛡️ Rəqib analizi. Counter qur. Turnir qazan.")
 
 st.markdown("---")
 
-st.markdown("## 🔍 Oyunçu Ara (API Key Tələb Olunmur)")
-player_tag = st.text_input("Oyunçu Tag-ini girin (Örn: 2Q9JG2RL):", value="")
+st.markdown("## 🔍 Oyunçu Ara (Açıq Verilənlər Bazası)")
+player_tag = st.text_input("Oyunçu Tag-ini girin (Örn: 8LGY0Y8RP):", value="")
 
 if st.button("Analiz Et 🚀"):
     if not player_tag:
         st.warning("⚠️ Zəhmət olmasa bir Oyunçu Tag-i daxil edin.")
     else:
-        # Tag-in daxilindəki boşluq və # işarəsini təmizləyirik
+        # Tag təmizləmə
         clean_tag = player_tag.replace("#", "").strip().upper()
         
-        # Heç bir IP və Key tələb etməyən birbaşa profil linki
-        url = f"https://statsroyale.com/profile/{clean_tag}"
+        # Tamamilə açıq və bloklanmayan API linki
+        url = f"https://api.clashroyale.com.es/v1/players/{clean_tag}"
         
-        with st.spinner("Profil məlumatları və dəstə gətirilir..."):
+        with st.spinner("Məlumatlar bazadan çəkilir, gözləyin..."):
             try:
-                headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-                response = requests.get(url, headers=headers)
+                response = requests.get(url, timeout=10)
                 
                 if response.status_code == 200:
-                    soup = BeautifulSoup(response.text, 'html.parser')
+                    data = response.json()
                     
-                    # Oyunçu adını tapmaq
-                    name_element = soup.find("div", {"class": "profileHeader__name"})
-                    player_name = name_element.text.strip() if name_element else "Tapılmadı"
+                    st.success("✅ Oyunçu tapıldı!")
                     
-                    if player_name == "Tapılmadı":
-                        st.error("❌ Oyunçu tapılmadı! Tag-i düzgün yazdığınızdan əmin olun.")
+                    # Profil məlumatları kartı
+                    name = data.get('name', 'Bilinmir')
+                    trophies = data.get('trophies', 0)
+                    best_trophies = data.get('bestTrophies', 0)
+                    wins = data.get('wins', 0)
+                    losses = data.get('losses', 0)
+                    
+                    st.markdown(f"""
+                    <div class="card">
+                        <h3>👤 Oyunçu: {name}</h3>
+                        <p>🏆 <b>Cari Kubok:</b> {trophies}</p>
+                        <p>🥇 <b>Maksimum Kubok:</b> {best_trophies}</p>
+                        <p>⚔️ <b>Qələbə/Məğlubiyyət:</b> {wins}W / {losses}L</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Dəstə (Deck) hissəsi
+                    st.subheader("🎴 Cari Aktiv Dəstə")
+                    cards = data.get('currentDeck', [])
+                    
+                    if cards:
+                        cols = st.columns(4)
+                        for idx, card in enumerate(cards):
+                            card_name = card.get('name', 'Kart')
+                            card_lvl = card.get('level', 1)
+                            with cols[idx % 4]:
+                                st.info(f"**{card_name}**\n*(Lvl {card_lvl})*")
                     else:
-                        st.success(f"✅ Oyunçu tapıldı: {player_name}")
+                        st.info("Aktiv dəstə məlumatı tapılmadı.")
                         
-                        # Kubok və digər əsas vizual detallar
-                        trophy_element = soup.find("div", {"class": "profileHeader__trophies"})
-                        trophies = trophy_element.text.strip() if trophy_element else "0"
-                        
-                        st.markdown(f"""
-                        <div class="card">
-                            <h3>👤 Oyunçu: {player_name}</h3>
-                            <p>🏆 <b>Cari Kubok:</b> {trophies}</p>
-                            <p>🆔 <b>Tag:</b> #{clean_tag}</p>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                        # Son istifadə olunan dəstə (Deck)
-                        st.subheader("🎴 Son Aktiv Dəstə (Current Deck)")
-                        
-                        deck_cards = soup.find_all("div", {"class": "profile__card"})
-                        
-                        if deck_cards:
-                            cols = st.columns(4)
-                            for idx, card in enumerate(deck_cards[:8]): # Maksimum 8 kart
-                                img_tag = card.find("img")
-                                card_name = img_tag['alt'] if img_tag and 'alt' in img_tag.attrs else "Kart"
-                                
-                                with cols[idx % 4]:
-                                    st.info(f"**{card_name}**")
-                        else:
-                            st.info("Aktiv dəstə vizualları yüklənə bilmədi, lakin profil mövcuddur.")
+                elif response.status_code == 404:
+                    st.error("❌ Oyunçu tapılmadı! Tag-i düzgün yazdığınızdan əmin olun.")
                 else:
-                    st.error("🚨 Profil platformasından məlumat alınmadı. Bir az sonra yenidən yoxlayın.")
+                    st.error(f"🚨 Sistem hazırda cavab vermir (Status: {response.status_code}).")
+                    
             except Exception as e:
-                st.error(f"🚨 Sistem xətası baş verdi: {str(e)}")
+                st.error(f"🚨 Bağlantı xətası: {str(e)}")
